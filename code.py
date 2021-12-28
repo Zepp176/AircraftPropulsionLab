@@ -71,12 +71,7 @@ Thrusti -= Thrust_offset
 m_fi -= m_f_offset
 
 LHV = 43.7e6
-A1 = 5.168e-3
-A2 = 2.818e-3
-A3 = 4.112e-3
-A4 = 6.323e-3
-A5 = 3.519e-3
-A6 = 3.318e-3
+A = np.array([5.168, 2.818, 4.112, 6.323, 3.519, 3.318])*1e-3
 R = 287.1
 gamma = 1.4
 cp = gamma*R/(gamma-1)
@@ -221,7 +216,7 @@ plt.savefig('fig_m_f_RPM.png', dpi=300)
 
 #%% ======= Cycle Analysis =======
 
-state_variables = np.empty((7, 7))  # 7 states and 7 variables
+state_variables = np.empty((7, 6))  # 7 states and 7 variables
 state_variables[:] = np.nan         # x coordinate is for the state number
                                     # y coordinate is for the variable
                                         # 0: ps
@@ -230,7 +225,10 @@ state_variables[:] = np.nan         # x coordinate is for the state number
                                         # 3: Tt
                                         # 4: u
                                         # 5: s
-                                        # 6: m_dot
+
+def mass_flow_rate(var, state):
+    rho = var[state][0]/(R*var[state][2])
+    return A[state-1]*rho*var[state][4]
 
 def print_states(var, to_print=range(7)):
     for i in to_print:
@@ -241,7 +239,27 @@ def print_states(var, to_print=range(7)):
         print("Tt{} = {:.1f} K".format(i, var[i][3]))
         print("u{} = {:.1f} m/s".format(i, var[i][4]))
         print("s{} = {:.2f} J/kgK".format(i, var[i][5]))
-        print("m_dot{} = {:.4f} kg/m^3".format(i, var[i][6]))
+        if i != 0:
+            mdot = mass_flow_rate(var, i)
+            print("m_dot{} = {:.3} g/s".format(i, mdot))
+
+def f(M):
+    return ( (gamma+1)/2 / (1+(gamma-1)/2*M**2) )**((gamma+1)/2/(gamma-1)) * M
+
+def f_m1(ratio):
+    M = 0.5
+    M_old = 0
+    i = 0
+    
+    while i < 100 and np.abs(M - M_old) > 1e-6:
+        M_old = M
+        M = ratio * ( ( (gamma+1)/2 / (1+(gamma-1)/2*M**2) )**((-gamma-1)/2/(gamma-1)) )
+        i += 1
+    
+    if i == 100:
+        print("Error: M did not converge")
+    
+    return M
 
 def get_state_3(var):
     ps3 = var[3][0]
@@ -255,57 +273,134 @@ def get_state_3(var):
     M3 = np.sqrt( 2/(gamma-1) * ( (pt3/ps3)**((gamma-1)/gamma) - 1 ) )
     T3 = Tt3/(1+(gamma-1)/2*M3**2)
     u3 = M3*np.sqrt(gamma*R*T3)
-    mdot3 = A3*u3*ps3/(R*T3)
     
     var[3][2] = T3
     var[3][4] = u3
-    var[3][6] = mdot3
     
 def get_state_2(var):
     ps2 = var[2][0]
-    mdot = var[3][6]
     
-    if (ps2 == np.nan or mdot == np.nan):
+    pt2 = var[0][1]
+    Tt2 = var[0][3]
+    
+    if (np.isnan(ps2) or np.isnan(pt2) or np.isnan(Tt2)):
         print("Error: missing values")
         return
     
-    T2 = var[3][2]*(ps2/var[3][0])**((gamma-1)/gamma)
-    u2 = mdot*R*T2/(A2*ps2)
-    M2 = u2/np.sqrt(gamma*R*T2)
-    Tt2 = T2*(1+(gamma-1)/2*M2**2)
-    pt2 = ps2*(1+(gamma-1)/2*M2**2)**(gamma/(gamma-1))
+    T2 = Tt2 * (ps2/pt2)**((gamma-1)/gamma)
+    M2 = np.sqrt( 2/(gamma-1) * ((pt2/ps2)**((gamma-1)/gamma) - 1) )
+    u2 = M2*np.sqrt(gamma*R*T2)
     
     var[2][1] = pt2
     var[2][2] = T2
     var[2][3] = Tt2
     var[2][4] = u2
-    var[2][6] = mdot
+    var[2][5] = var[0][5] # entropy
     
-def get_state_4(var, fuel_mass_rate):
-    pt4 = var[4][1]
+def get_state_4(var):
+    pt4 = var[3][1] # we assume pt4 = pt3 even if we mesure pt4...
     Tt4 = var[4][3]
-    mdot = var[3][6] + fuel_mass_rate
     
-    if (np.isnan(pt4) or np.isnan(Tt4) or np.isnan(mdot)):
+    ps4 = var[3][0]
+    
+    if (np.isnan(pt4) or np.isnan(Tt4) or np.isnan(ps4)):
         print("Error: missing values")
         return
     
-    # ========= TODO =========
+    M4 = np.sqrt( 2/(gamma-1) * ((pt4/ps4)**((gamma-1)/gamma) -1) )
+    T4 = Tt4/(1+(gamma-1)/2*M4**2)
+    u4 = M4*np.sqrt(gamma*R*T4)
     
-regime = 1
+    var[4][0] = ps4
+    var[4][2] = T4
+    var[4][4] = u4
+    
+def get_state_6(var):
+    pt6 = var[5][1]
+    
+    Tt6 = var[6][3]
+    ps6 = var[6][0]
+    
+    if (np.isnan(pt6) or np.isnan(Tt6) or np.isnan(ps6)):
+        print("Error: missing values")
+        return
+    
+    M6 = np.sqrt( 2/(gamma-1) * ((pt6/ps6)**((gamma-1)/gamma) -1) )
+    T6 = Tt6/(1+(gamma-1)/2*M6**2)
+    u6 = M6*np.sqrt(gamma*R*T6)
+    
+    var[6][2] = T6
+    var[6][4] = u6
+    var[6][1] = pt6
+    
+def get_state_1(var):
+    u2 = var[2][4]
+    T2 = var[2][2]
+    
+    M2 = u2/np.sqrt(gamma*R*T2)
+    As = A[1]*f(M2)
+    
+    M1 = f_m1(As/A[0])
+    
+    Tt1 = var[0][3]
+    T1 = Tt1/(1+(gamma-1)/2*M1**2)
+    pt1 = var[0][1]
+    ps1 = pt1*(1+(gamma-1)/2*M1**2)**(-gamma/(gamma-1))
+    u1 = M1*np.sqrt(gamma*R*T1)
+    
+    var[1][0] = ps1
+    var[1][1] = pt1
+    var[1][2] = T1
+    var[1][3] = Tt1
+    var[1][4] = u1
+    var[1][5] = var[0][5] # entropy
+    
+def get_state_5(var):
+    u6 = var[6][4]
+    T6 = var[6][2]
+    
+    M6 = u6/np.sqrt(gamma*R*T6)
+    As = A[5]*f(M6)
+    
+    M5 = f_m1(As/A[4])
+    
+    Tt5 = var[5][3]
+    T5 = Tt5/(1+(gamma-1)/2*M5**2)
+    pt5 = var[5][1]
+    ps5 = pt5*(1+(gamma-1)/2*M5**2)**(-gamma/(gamma-1))
+    u5 = M5*np.sqrt(gamma*R*T5)
+    
+    var[5][0] = ps5
+    var[5][2] = T5
+    var[5][4] = u5
 
+regime = 4
+
+state_variables[0][0] = 1e5
+state_variables[0][1] = 1e5
+state_variables[0][2] = 17.15 + 273.15
+state_variables[0][3] = 17.15 + 273.15
+state_variables[0][4] = 0
+state_variables[0][5] = 0
 state_variables[3][0] = ps3i[regime]*1e5
 state_variables[3][1] = pt3i[regime]*1e5
 state_variables[3][3] = Tt3i[regime]+273.15
 state_variables[2][0] = ps2i[regime]*1e5
 state_variables[4][1] = pt4i[regime]*1e5
 state_variables[4][3] = Tt4i[regime]+273.15
+state_variables[6][0] = 1e5
+state_variables[6][3] = Tt6i[regime]+273.15
+state_variables[5][1] = pt5i[regime]*1e5
+state_variables[5][3] = Tt5i[regime]+273.15
 
 get_state_3(state_variables)
 get_state_2(state_variables)
-get_state_4(state_variables, m_fi[regime])
+get_state_4(state_variables)
+get_state_6(state_variables)
+get_state_1(state_variables)
+get_state_5(state_variables)
 
-print_states(state_variables, [3,2,4])
+print_states(state_variables)
 
 
 
