@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 
 #%% ======= data =======
 
@@ -70,8 +69,17 @@ for j in range(len(borne)-1):
 
 Thrusti -= Thrust_offset
 m_fi -= m_f_offset
-#LHV = 43.7e
-#A1 = 
+
+LHV = 43.7e6
+A1 = 5.168e-3
+A2 = 2.818e-3
+A3 = 4.112e-3
+A4 = 6.323e-3
+A5 = 3.519e-3
+A6 = 3.318e-3
+R = 287.1
+gamma = 1.4
+cp = gamma*R/(gamma-1)
 
 #%% ======= Plots =======
 
@@ -211,16 +219,94 @@ plt.xlabel('RPM x 1000')
 plt.ylabel('$\dot m_f$ [g/s]')
 plt.savefig('fig_m_f_RPM.png', dpi=300)
 
-#%%
+#%% ======= Cycle Analysis =======
 
-R = 8.314/0.2896
-gamma = 1.4
-cp = gamma/(gamma-1) * R
+state_variables = np.empty((7, 7))  # 7 states and 7 variables
+state_variables[:] = np.nan         # x coordinate is for the state number
+                                    # y coordinate is for the variable
+                                        # 0: ps
+                                        # 1: pt
+                                        # 2: T
+                                        # 3: Tt
+                                        # 4: u
+                                        # 5: s
+                                        # 6: m_dot
 
-u3 = np.sqrt(2*(pt3 - ps3))
-T3 = Tt3 - u3**2/(2*cp)
-rho3 = ps3/(R*T3)
-m_dot_0 = 
+def print_states(var, to_print=range(7)):
+    for i in to_print:
+        print("\n=== State {} ===\n".format(i))
+        print("ps{} = {:.4f} bar".format(i, var[i][0]/1e5))
+        print("pt{} = {:.4f} bar".format(i, var[i][1]/1e5))
+        print("T{} = {:.1f} K".format(i, var[i][2]))
+        print("Tt{} = {:.1f} K".format(i, var[i][3]))
+        print("u{} = {:.1f} m/s".format(i, var[i][4]))
+        print("s{} = {:.2f} J/kgK".format(i, var[i][5]))
+        print("m_dot{} = {:.4f} kg/m^3".format(i, var[i][6]))
+
+def get_state_3(var):
+    ps3 = var[3][0]
+    pt3 = var[3][1]
+    Tt3 = var[3][3]
+    
+    if (ps3 == np.nan or pt3 == np.nan or Tt3 == np.nan):
+        print("Error: missing values")
+        return
+    
+    M3 = np.sqrt( 2/(gamma-1) * ( (pt3/ps3)**((gamma-1)/gamma) - 1 ) )
+    T3 = Tt3/(1+(gamma-1)/2*M3**2)
+    u3 = M3*np.sqrt(gamma*R*T3)
+    mdot3 = A3*u3*ps3/(R*T3)
+    
+    var[3][2] = T3
+    var[3][4] = u3
+    var[3][6] = mdot3
+    
+def get_state_2(var):
+    ps2 = var[2][0]
+    mdot = var[3][6]
+    
+    if (ps2 == np.nan or mdot == np.nan):
+        print("Error: missing values")
+        return
+    
+    T2 = var[3][2]*(ps2/var[3][0])**((gamma-1)/gamma)
+    u2 = mdot*R*T2/(A2*ps2)
+    M2 = u2/np.sqrt(gamma*R*T2)
+    Tt2 = T2*(1+(gamma-1)/2*M2**2)
+    pt2 = ps2*(1+(gamma-1)/2*M2**2)**(gamma/(gamma-1))
+    
+    var[2][1] = pt2
+    var[2][2] = T2
+    var[2][3] = Tt2
+    var[2][4] = u2
+    var[2][6] = mdot
+    
+def get_state_4(var, fuel_mass_rate):
+    pt4 = var[4][1]
+    Tt4 = var[4][3]
+    mdot = var[3][6] + fuel_mass_rate
+    
+    if (np.isnan(pt4) or np.isnan(Tt4) or np.isnan(mdot)):
+        print("Error: missing values")
+        return
+    
+    # ========= TODO =========
+    
+regime = 1
+
+state_variables[3][0] = ps3i[regime]*1e5
+state_variables[3][1] = pt3i[regime]*1e5
+state_variables[3][3] = Tt3i[regime]+273.15
+state_variables[2][0] = ps2i[regime]*1e5
+state_variables[4][1] = pt4i[regime]*1e5
+state_variables[4][3] = Tt4i[regime]+273.15
+
+get_state_3(state_variables)
+get_state_2(state_variables)
+get_state_4(state_variables, m_fi[regime])
+
+print_states(state_variables, [3,2,4])
+
 
 
 
