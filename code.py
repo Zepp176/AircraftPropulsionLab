@@ -70,8 +70,8 @@ for j in range(len(borne)-1):
 
 Thrusti -= Thrust_offset
 m_fi -= m_f_offset
-
-Thrusti
+#LHV = 43.7e
+#A1 = 
 
 #%% ======= Plots =======
 
@@ -163,6 +163,18 @@ plt.savefig('fig_pressure_RPM.png', dpi=300)
 
 plt.figure(figsize=(7, 4))
 
+plt.plot(RPMi/1000, ps3i/ps2i, 'o-k')
+
+plt.grid()
+plt.title('Compression ratio depending on the shaft speed')
+plt.xlabel('RPM x 1000')
+plt.ylabel('$\\pi_c$ [-]')
+plt.savefig('fig_compression_ratio.png', dpi=300)
+
+#%%
+
+plt.figure(figsize=(7, 4))
+
 plt.plot(RPMi/1000, Tt3i, 'o-')
 plt.plot(RPMi/1000, Tt4i, 'o-')
 plt.plot(RPMi/1000, Tt5i, 'o-')
@@ -198,6 +210,26 @@ plt.title('Fuel consumption depending on the shaft speed')
 plt.xlabel('RPM x 1000')
 plt.ylabel('$\dot m_f$ [g/s]')
 plt.savefig('fig_m_f_RPM.png', dpi=300)
+
+#%%
+
+R = 8.314/0.2896
+gamma = 1.4
+cp = gamma/(gamma-1) * R
+
+u3 = np.sqrt(2*(pt3 - ps3))
+T3 = Tt3 - u3**2/(2*cp)
+rho3 = ps3/(R*T3)
+m_dot_0 = 
+
+
+
+
+
+
+
+
+
 
 
 
